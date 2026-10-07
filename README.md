@@ -1,36 +1,63 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TaskFlow web app
 
-## Getting Started
+Next.js 16 frontend for the [taskflow](../taskflow) API: accounts, lists, tasks and due dates.
 
-First, run the development server:
+## How it talks to the backend
+
+All backend calls happen on the Next.js server, in Server Components and Server Actions (`lib/api.ts`). The browser never sees the API URL or the session token. After login the token is stored in an httpOnly, SameSite=Lax cookie named `tf_session` on this app's origin, so the backend needs no CORS configuration.
+
+`proxy.ts` only checks whether that cookie exists to redirect between `/login` and `/lists`. Real authorization happens in `lib/dal.ts` and inside every Server Action. A stale cookie is cleared by `GET /auth/expire`.
+
+## Prerequisites
+
+- Node.js 20.9 or newer (the repo is developed on Node 24).
+- The backend running on `http://localhost:3000` with its PostgreSQL database (see the backend README).
+
+## Run it
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env.local   # TASKFLOW_API_URL=http://localhost:3000
+npm install
+npm run dev                  # http://localhost:3001
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The dev server uses port 3001 because the backend defaults to 3000.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Command | What it does |
+|---|---|
+| `npm run dev` | Dev server on port 3001 |
+| `npm run build` / `npm start` | Production build and server (port 3001) |
+| `npm test` | Vitest unit tests (`tests/`) |
+| `npm run typecheck` | `next typegen` then `tsc --noEmit` |
+| `npm run lint` | ESLint |
 
-## Learn More
+## Routes
 
-To learn more about Next.js, take a look at the following resources:
+| Path | Purpose |
+|---|---|
+| `/` | Redirects to `/lists` or `/login` |
+| `/login`, `/register` | Email + password forms |
+| `/lists` | All of your lists, create a list |
+| `/lists/[listId]` | Rename or delete the list; add, edit, complete, delete tasks |
+| `/account` | Email, member since, change password, log out, backend health |
+| `/auth/expire` | Clears a stale session cookie and redirects to `/login` |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Every backend endpoint is covered: health (account page), register, login, logout, me, change password, list/create/rename/delete lists, create/update/delete tasks.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Project layout
 
-## Deploy on Vercel
+```
+app/            routes, layouts, error/not-found boundaries, Server Actions (app/actions)
+components/     UI; files with "use client" are the interactive leaves
+lib/            api client (server-only), session cookie, data-access layer, validation, dates
+proxy.ts        optimistic cookie-based redirects
+tests/          Vitest: api client, validation, dates, proxy, TaskItem
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Troubleshooting
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- **Redirected to `/login` right after logging in**: the backend rejected the token (restarted database, expired session). `/auth/expire` clears the cookie; log in again.
+- **"The backend is unreachable"**: check that the API answers on `TASKFLOW_API_URL` (`curl localhost:3000/health`).
+- **Port 3001 in use**: run `npx next dev -p <port>` and adjust nothing else.

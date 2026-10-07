@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { logout } from "@/app/actions/auth";
 import { ChangePasswordForm } from "@/components/auth/change-password-form";
 import { BackendStatus } from "@/components/backend-status";
+import { LocalTimestamp } from "@/components/local-timestamp";
 import { SubmitButton } from "@/components/submit-button";
 import { getCurrentUser } from "@/lib/dal";
 import { formatTimestamp } from "@/lib/dates";
@@ -20,7 +21,9 @@ export default async function AccountPage() {
           <dt className="text-zinc-500">Email</dt>
           <dd>{user.email}</dd>
           <dt className="text-zinc-500">Member since</dt>
-          <dd>{formatTimestamp(user.createdAt)}</dd>
+          <dd>
+            <LocalTimestamp iso={user.createdAt} serverText={formatTimestamp(user.createdAt)} />
+          </dd>
         </dl>
       </div>
 

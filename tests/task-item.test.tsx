@@ -1,4 +1,6 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { hydrateRoot } from "react-dom/client";
+import { renderToString } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/app/actions/tasks", () => ({
@@ -19,7 +21,15 @@ const task: Task = {
   done: false,
 };
 
+/** Pins the browser clock to local noon on the given YYYY-MM-DD. */
+function setBrowserDate(iso: string) {
+  const [y, m, d] = iso.split("-").map(Number);
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(y ?? 0, (m ?? 1) - 1, d ?? 1, 12));
+}
+
 function renderItem(overrides: Partial<Task> = {}, today = "2026-10-04") {
+  setBrowserDate(today);
   return render(
     <ul>
       <TaskItem task={{ ...task, ...overrides }} today={today} />
@@ -30,6 +40,7 @@ function renderItem(overrides: Partial<Task> = {}, today = "2026-10-04") {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.useRealTimers();
 });
 
 describe("TaskItem", () => {
@@ -68,5 +79,41 @@ describe("TaskItem", () => {
   it("does not mark done tasks as overdue", () => {
     renderItem({ done: true }, "2026-10-11");
     expect(screen.queryByText(/overdue/)).toBeNull();
+  });
+
+  it("uses the browser's date, not the server's, to decide overdue", () => {
+    // Server thinks it is Oct 4 (not overdue for a task due Oct 10); the browser is already on Oct 11.
+    setBrowserDate("2026-10-11");
+    render(
+      <ul>
+        <TaskItem task={task} today="2026-10-04" />
+      </ul>,
+    );
+    expect(screen.getByText(/overdue/)).toBeDefined();
+  });
+
+  it("hydrates the server HTML without a mismatch, then switches to the browser's date", async () => {
+    const tree = (
+      <ul>
+        <TaskItem task={task} today="2026-10-04" />
+      </ul>
+    );
+    const container = document.createElement("div");
+    container.innerHTML = renderToString(tree);
+    document.body.appendChild(container);
+    expect(container.textContent).not.toMatch(/overdue/);
+
+    setBrowserDate("2026-10-11");
+    const recoverable = vi.fn();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    await act(async () => {
+      hydrateRoot(container, tree, { onRecoverableError: recoverable });
+    });
+
+    expect(recoverable).not.toHaveBeenCalled();
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(container.textContent).toMatch(/overdue/);
+    consoleError.mockRestore();
+    container.remove();
   });
 });

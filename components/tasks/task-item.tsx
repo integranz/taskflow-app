@@ -6,16 +6,21 @@ import { FormError } from "@/components/form-error";
 import { SubmitButton } from "@/components/submit-button";
 import { buttonVariants, inputClass } from "@/components/ui";
 import type { ActionState } from "@/lib/action-state";
-import { formatCalendarDate, isOverdue } from "@/lib/dates";
+import { formatCalendarDate, isOverdue, todayIso } from "@/lib/dates";
 import type { Task } from "@/lib/types";
+import { useLocalValue } from "@/lib/use-local-value";
 
 type Props = {
   task: Task;
-  /** Today's date as YYYY-MM-DD, computed once on the server so SSR and hydration agree. */
+  /**
+   * The server's date as YYYY-MM-DD. Used only for the server render and hydration;
+   * after that the browser's local date decides what counts as overdue.
+   */
   today: string;
 };
 
-export function TaskItem({ task, today }: Props) {
+export function TaskItem({ task, today: serverToday }: Props) {
+  const today = useLocalValue(serverToday, () => todayIso());
   const [optimisticDone, setOptimisticDone] = useOptimistic(task.done);
   const [isToggling, startToggle] = useTransition();
   const [toggleError, setToggleError] = useState<string | undefined>();

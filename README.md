@@ -43,6 +43,7 @@ The dev server uses port 3001 because the backend defaults to 3000.
 | `/lists/[listId]` | Rename or delete the list; add, edit, complete, delete tasks |
 | `/account` | Email, member since, change password, log out, backend health |
 | `/auth/expire` | Clears a stale session cookie and redirects to `/login` |
+| `/health` | Liveness probe: `200 {"status":"ok","version"}`, public, never calls the backend. `version` comes from the `VERSION` env var |
 
 Every backend endpoint is covered: health (account page), register, login, logout, me, change password, list/create/rename/delete lists, create/update/delete tasks.
 

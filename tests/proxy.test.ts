@@ -47,4 +47,9 @@ describe("proxy", () => {
     expect(getRedirectUrl(proxy(request("/auth/expire")))).toBeNull();
     expect(getRedirectUrl(proxy(request("/auth/expire", SESSION)))).toBeNull();
   });
+
+  it("leaves the health check open to probes without a cookie", () => {
+    expect(getRedirectUrl(proxy(request("/health")))).toBeNull();
+    expect(getRedirectUrl(proxy(request("/health", SESSION)))).toBeNull();
+  });
 });

@@ -14,6 +14,9 @@ export function proxy(request: NextRequest) {
   // /auth/expire must stay reachable with a (stale) cookie, or the loop breaker cannot run.
   if (pathname.startsWith("/auth/")) return NextResponse.next();
 
+  // Container probes call /health with no cookie; never redirect them.
+  if (pathname === "/health") return NextResponse.next();
+
   if (PUBLIC_PATHS.has(pathname)) {
     return hasSession ? NextResponse.redirect(new URL("/lists", request.url)) : NextResponse.next();
   }

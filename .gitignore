@@ -42,3 +42,22 @@ next-env.d.ts
 
 # keep the template
 !.env.example
+
+# added by slipway
+.slipway/approvals/
+.slipway/tracking-queue.jsonl
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+tfplan*
+*.tfplan
+.terraform/
+.terraform.lock.hcl.tmp
+.env
+.env.*
+*.key
+node_modules/
+dist/
+bin/
+obj/

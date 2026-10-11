@@ -1,0 +1,96 @@
+# Foundation layer: everything the app layer and CI need, created once per environment and rarely changed.
+# Applied by a human after /slipway:plan and an approval token. The resource group itself is created by setup-azure.sh.
+
+data "azurerm_client_config" "current" {}
+
+data "azurerm_resource_group" "env" {
+  name = local.resource_group_name
+}
+
+# CI/CD identity (GitHub Actions via OIDC), created by .slipway/setup-azure.sh
+data "azuread_service_principal" "cicd" {
+  display_name = local.cicd_principal_name
+}
+
+resource "azurerm_log_analytics_workspace" "this" {
+  name                = local.log_analytics_name
+  location            = data.azurerm_resource_group.env.location
+  resource_group_name = data.azurerm_resource_group.env.name
+  sku                 = "PerGB2018"
+  retention_in_days   = 30
+  tags                = local.tags
+}
+
+# Shared registry (options.registry_scope: existing): referenced, never created or deleted by this repository.
+# This repository's CI/CD principal gets AcrPush (and Reader for the app layer's lookup), the app identity AcrPull.
+data "azurerm_container_registry" "this" {
+  name                = local.acr_name
+  resource_group_name = local.acr_resource_group_name
+}
+
+# Identity the apps run as: pulls images and reads secrets, nothing else.
+resource "azurerm_user_assigned_identity" "apps" {
+  name                = local.identity_name
+  location            = data.azurerm_resource_group.env.location
+  resource_group_name = data.azurerm_resource_group.env.name
+  tags                = local.tags
+}
+
+resource "azurerm_key_vault" "this" {
+  name                       = local.key_vault_name
+  location                   = data.azurerm_resource_group.env.location
+  resource_group_name        = data.azurerm_resource_group.env.name
+  tenant_id                  = data.azurerm_client_config.current.tenant_id
+  sku_name                   = "standard"
+  rbac_authorization_enabled = true # data-plane access via RBAC roles, no access policies
+  soft_delete_retention_days = 7
+  purge_protection_enabled   = false # demo environment; enable for anything holding real secrets
+  tags                       = local.tags
+}
+
+# --- role assignments (all non-privileged; assignable under an ABAC-conditioned User Access Administrator) ---
+
+resource "azurerm_role_assignment" "apps_acr_pull" {
+  scope                = data.azurerm_container_registry.this.id
+  role_definition_name = "AcrPull"
+  principal_id         = azurerm_user_assigned_identity.apps.principal_id
+  principal_type       = "ServicePrincipal"
+  description          = "App identity pulls images"
+}
+
+resource "azurerm_role_assignment" "apps_kv_secrets_user" {
+  scope                = azurerm_key_vault.this.id
+  role_definition_name = "Key Vault Secrets User"
+  principal_id         = azurerm_user_assigned_identity.apps.principal_id
+  principal_type       = "ServicePrincipal"
+  description          = "App identity reads secret values (Container Apps secret references)"
+}
+
+resource "azurerm_role_assignment" "cicd_acr_push" {
+  scope                            = data.azurerm_container_registry.this.id
+  role_definition_name             = "AcrPush"
+  principal_id                     = data.azuread_service_principal.cicd.object_id
+  principal_type                   = "ServicePrincipal"
+  skip_service_principal_aad_check = true
+  description                      = "CI pushes immutable image tags"
+}
+
+# The CI/CD principal reads the shared registry's metadata for the app layer's data source; its Contributor role covers
+# only this repository's resource group.
+resource "azurerm_role_assignment" "cicd_acr_reader" {
+  scope                            = data.azurerm_container_registry.this.id
+  role_definition_name             = "Reader"
+  principal_id                     = data.azuread_service_principal.cicd.object_id
+  principal_type                   = "ServicePrincipal"
+  skip_service_principal_aad_check = true
+  description                      = "CI/CD looks up the shared registry (app layer data source)"
+}
+
+# The person applying this layer sets secret values out of band (az keyvault secret set).
+resource "azurerm_role_assignment" "applier_kv_secrets_officer" {
+  scope                = azurerm_key_vault.this.id
+  role_definition_name = "Key Vault Secrets Officer"
+  principal_id         = data.azurerm_client_config.current.object_id
+  principal_type       = "User"
+  description          = "Human who applies the foundation manages secret values"
+}

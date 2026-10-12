@@ -1,0 +1,77 @@
+# .slipway/config.yaml — written by /slipway:bootstrap, read by every other slipway skill.
+schema_version: 1
+
+project:
+  name: taskflow-app
+  description: TaskFlow web app (Next.js 16 frontend for the taskflow API) delivered by the slipway plugin
+
+options:
+  cloud: azure
+  compute: aca
+  registry: acr
+  registry_scope: existing
+  runner: github-actions
+  versioning: nbgv
+  branching: trunk
+  tracker: jira
+  tracker_transport: both
+  secret_store: azure-key-vault
+  base_image: dhi
+  cd_trigger: manual
+  pr_checks: path-filtered
+  cd_approval: github-ui
+  apply_gate: prompt
+  evidence_store: release
+  config_store: env
+  database: none
+
+azure:
+  # subscription_id / tenant_id are omitted on purpose: tooling reads ARM_SUBSCRIPTION_ID / ARM_TENANT_ID
+  # (locally via `az account set`, in CI via GitHub secrets AZURE_SUBSCRIPTION_ID / AZURE_TENANT_ID).
+  location: westeurope
+  resource_group: rg-taskflow-dev
+  acr_name: acrtaskflowdev
+  # acr_resource_group omitted: the shared registry lives in azure.resource_group (rg-taskflow-dev)
+  key_vault_name: kv-taskflow-app-dev
+  identity_name: id-taskflow-app-dev
+  state:
+    resource_group: rg-taskflow-app-tfstate
+    storage_account: sttaskflowapptf
+    container: tfstate
+
+github:
+  owner: integranz
+  repo: taskflow-app
+  default_branch: main
+  cd_environment: dev
+
+jira:
+  site_url: https://integranz.atlassian.net
+  project_key: DEVOPS
+  issue_type: Story
+  subtask_issue_type: Subtask
+  transitions:
+    start: In Progress
+    review: In Review
+    done: Done
+
+environments: [dev]
+
+pipelines:
+  name_prefix: taskflow-app
+shared_paths: []
+
+apps:
+  - name: web
+    path: .
+    kind: frontend
+    stack: custom
+    port: 3001
+    health_path: /health
+    test_command: npm test
+    image_repository: taskflow-app/web
+    env:
+      TASKFLOW_API_URL: https://api.lemonmeadow-c31d1558.westeurope.azurecontainerapps.io
+    version: "0.1"
+
+cursor_mirror: false
